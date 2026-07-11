@@ -8,4 +8,5 @@ import (
 
 type Provider interface {
 	Chat(ctx context.Context, req model.ChatRequest) (*model.ChatResponse, error)
+	Name() string
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"github.com/eviltwin7648/llm-gateway/internal/cache"
 	"github.com/eviltwin7648/llm-gateway/internal/embedder"
@@ -17,21 +18,59 @@ type GatewayService struct {
 	usage    usage.UsageRecorder
 }
 
-func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) model.ChatResponse {
-	embedding := g.embedder.Embed(ctx, req.Prompt)
-
-	hit := g.cache.GetData(ctx, embedding)
-
-	if hit {
-		return hit.Response //type mismatch
+func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) (model.ChatResponse, error) {
+	//normalize req
+	normalizedReq := g.normalize(req)
+	//embedd req
+	embedding, err := g.embedder.Embed(ctx, normalizedReq.Prompt)
+	if err != nil {
+		return model.ChatResponse{}, err
+	}
+	//check cache
+	hit, found, err := g.cache.LookUp(ctx, embedding, cache.LookupFilter{
+		Provider: normalizedReq.Provider,
+		Model:    normalizedReq.Model,
+	})
+	if err != nil {
+		return model.ChatResponse{}, err
+	}
+	//return if found
+	if found && hit != nil {
+		return model.ChatResponse{
+			Content: hit.Response,
+			Model:   hit.Model,
+			//since its a cached req, i'm setting the usage and token as 0
+			Usage:  0,
+			Tokens: 0,
+		}, nil
 	}
 
-	provider := g.router.Route(req.Model)
+	// if not found || route based on model name
+	//router should return the provider implementation not the enum
+	providerImpl, err := g.router.Route(normalizedReq.Model)
+	if err != nil {
+		return model.ChatResponse{}, err
+	}
+	resp, err := providerImpl.Chat(ctx, normalizedReq)
+	if err != nil {
+		return model.ChatResponse{}, err
+	}
+	//cache response
+	g.cache.Store(ctx)
+	//record usage
+	g.usage.Record()
+	//return response
+	return resp, nil
+}
 
-	resp := provider.Chat(req)
-
-	g.usage.Record() // pass whatever required
-	g.cache.SetData(resp)
-	return resp
-
+func (g *GatewayService) normalize(req model.ChatRequest) model.ChatRequest {
+	providerImpl, err := g.router.Route(req.Model)
+	if err != nil {
+		return model.ChatRequest{}
+	}
+	return model.ChatRequest{
+		Prompt:   strings.TrimSpace(req.Prompt),
+		Model:    strings.ToLower(strings.TrimSpace(req.Model)),
+		Provider: providerImpl.Name(),
+	}
 }

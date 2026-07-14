@@ -1,75 +1,54 @@
 package embedder
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
-	"net/http"
-	"time"
-)
 
-const OPENAI_URL = "http/example/openai/embedding/url"
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+)
 
 type Embedder interface {
 	Embed(ctx context.Context, text string) (Embedding, error)
 }
 
 type OpenAIEmbedder struct {
-	client *http.Client
-}
-type Embedding struct {
-	Id     string
-	Values []float32
-}
-type embeddingResponse struct { //ref openaidocs
-	Data []struct {
-		Embedding []float32 `json:"embedding"`
-		Index     int       `json:"index"`
-	} `json:"data"`
-	Usage struct {
-		PromptTokens int `json:"prompt_tokens"`
-		TotalTokens  int `json:"total_tokens"`
-	} `json:"usage"`
-	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-	}
+	client openai.Client
 }
 
-func NewEmbedder() *OpenAIEmbedder {
+type Embedding struct {
+	Values []float32
+}
+
+func NewEmbedder(apiKey string, baseURL string) *OpenAIEmbedder {
+	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	if baseURL != "" {
+		opts = append(opts, option.WithBaseURL(baseURL))
+	}
+	client := openai.NewClient(opts...)
 	return &OpenAIEmbedder{
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		client: client,
 	}
 }
 
 func (e *OpenAIEmbedder) Embed(ctx context.Context, content string) (Embedding, error) {
-	client := e.client
-	body, err := json.Marshal(content)
-	resp, err := client.Post(OPENAI_URL, "application/json", bytes.NewReader(body))
+	embedding, err := e.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
+		Input: openai.EmbeddingNewParamsInputUnion{
+			OfArrayOfStrings: []string{content},
+		},
+		Model: openai.EmbeddingModelTextEmbedding3Small,
+	})
 	if err != nil {
 		return Embedding{}, err
 	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return Embedding{}, err
-	}
-	var result embeddingResponse
-	err = json.Unmarshal(raw, &result)
-	if err != nil {
-		return Embedding{}, err
-	}
-	if result.Error != nil {
-		return Embedding{}, errors.New(result.Error.Message)
+	
+	// Convert []float64 to []float32
+	float64Vals := embedding.Data[0].Embedding
+	float32Vals := make([]float32, len(float64Vals))
+	for i, v := range float64Vals {
+		float32Vals[i] = float32(v)
 	}
 
 	return Embedding{
-		Id:     "",
-		Values: result.Data[0].Embedding,
+		Values: float32Vals,
 	}, nil
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/eviltwin7648/llm-gateway/internal/cache"
 	"github.com/eviltwin7648/llm-gateway/internal/embedder"
@@ -12,10 +13,19 @@ import (
 )
 
 type GatewayService struct {
-	cache    cache.Cache
+	cache    cache.CacheStore
 	embedder embedder.Embedder
-	router   router.Router
-	usage    usage.UsageRecorder
+	router   *router.Router
+	usage    *usage.UsageRecorder
+}
+
+func NewGatewayService(c cache.CacheStore, e embedder.Embedder, r *router.Router, u *usage.UsageRecorder) *GatewayService {
+	return &GatewayService{
+		cache:    c,
+		embedder: e,
+		router:   r,
+		usage:    u,
+	}
 }
 
 func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) (model.ChatResponse, error) {
@@ -27,7 +37,7 @@ func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) 
 		return model.ChatResponse{}, err
 	}
 	//check cache
-	hit, found, err := g.cache.LookUp(ctx, embedding, cache.LookupFilter{
+	hit, found, err := g.cache.LookUp(ctx, embedding.Values, cache.LookupFilter{
 		Provider: normalizedReq.Provider,
 		Model:    normalizedReq.Model,
 	})
@@ -56,11 +66,22 @@ func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) 
 		return model.ChatResponse{}, err
 	}
 	//cache response
-	g.cache.Store(ctx)
+	g.cache.Store(ctx, cache.CacheEntry{
+		Embeddings: embedding.Values,
+		Prompt:     normalizedReq.Prompt,
+		Response:   resp.Content,
+		Provider:   normalizedReq.Provider,
+		Model:      normalizedReq.Model,
+
+		// Temprature: normalizedReq.Temprature,
+		HitCount:  0,
+		LastUsed:  time.Now(),
+		CreatedAt: time.Now(),
+	})
 	//record usage
-	g.usage.Record()
+	g.usage.Record(normalizedReq, *resp)
 	//return response
-	return resp, nil
+	return *resp, nil
 }
 
 func (g *GatewayService) normalize(req model.ChatRequest) model.ChatRequest {

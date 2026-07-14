@@ -37,9 +37,9 @@ type RedisCache struct {
 	rdb *redis.Client
 }
 
-func NewCache() *RedisCache {
+func NewCache(redisURL string) *RedisCache {
 	return &RedisCache{
-		rdb: NewRedisClient(),
+		rdb: NewRedisClient(redisURL),
 	}
 }
 

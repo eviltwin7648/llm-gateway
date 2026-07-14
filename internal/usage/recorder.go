@@ -1,20 +1,25 @@
+// just for console logging
 package usage
 
 import (
+	"context"
 	"log"
 
 	"github.com/eviltwin7648/llm-gateway/internal/model"
 )
 
-type UsageRecorder struct {
+// create implementations for whatever service u need to use (sql , redis etc)
+type Recorder interface {
+	Record(ctx context.Context, req model.ChatRequest, resp model.ChatResponse) error
 }
 
-func NewUsageRecorder() *UsageRecorder {
-	return &UsageRecorder{}
+type LogRecorder struct{}
+
+func NewLogRecorder() *LogRecorder {
+	return &LogRecorder{}
 }
 
-func (u *UsageRecorder) Record(req model.ChatRequest, resp model.ChatResponse) {
-	// For now, we will simply log the usage to stdout.
-	// In a real implementation, this would insert a row into a database (e.g. Postgres, ClickHouse).
+func (u *LogRecorder) Record(ctx context.Context, req model.ChatRequest, resp model.ChatResponse) error {
 	log.Printf("[USAGE] Provider: %s | Model: %s | Tokens: %d | UsageCost: %d", req.Provider, resp.Model, resp.Tokens, resp.Usage)
+	return nil
 }

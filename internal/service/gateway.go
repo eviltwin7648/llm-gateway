@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -16,10 +17,10 @@ type GatewayService struct {
 	cache    cache.CacheStore
 	embedder embedder.Embedder
 	router   *router.Router
-	usage    *usage.UsageRecorder
+	usage    usage.Recorder
 }
 
-func NewGatewayService(c cache.CacheStore, e embedder.Embedder, r *router.Router, u *usage.UsageRecorder) *GatewayService {
+func NewGatewayService(c cache.CacheStore, e embedder.Embedder, r *router.Router, u usage.Recorder) *GatewayService {
 	return &GatewayService{
 		cache:    c,
 		embedder: e,
@@ -79,7 +80,9 @@ func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) 
 		CreatedAt: time.Now(),
 	})
 	//record usage
-	g.usage.Record(normalizedReq, *resp)
+	if err := g.usage.Record(ctx, normalizedReq, *resp); err != nil {
+		log.Printf("Failed to record usage: %v", err)
+	}
 	//return response
 	return *resp, nil
 }

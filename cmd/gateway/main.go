@@ -40,15 +40,18 @@ func main() {
 	// Initialize Router
 	r := router.NewRouter(openAIProvider, geminiProvider, anthropicProvider, deepSeekProvider)
 
+	// Initialize Shared Redis Client
+	redisClient := cache.NewRedisClient(cfg.RedisURL)
+
 	// Initialize Cache, Embedder, and Usage Recorder
-	c := cache.NewCache(cfg.RedisURL)
+	c := cache.NewCache(redisClient)
 	var e embedder.Embedder
 	if cfg.OpenAIAPIKey != "" {
 		e = embedder.NewEmbedder(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL)
 	} else {
 		log.Println("WARNING: Embedder is nil because OPENAI_API_KEY is not set.")
 	}
-	u := usage.NewUsageRecorder()
+	u := usage.NewRedisRecorder(redisClient)
 
 	// Initialize Gateway Service
 	gatewayService := service.NewGatewayService(c, e, r, u)

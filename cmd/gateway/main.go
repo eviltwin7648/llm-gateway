@@ -51,7 +51,9 @@ func main() {
 	} else {
 		log.Println("WARNING: Embedder is nil because OPENAI_API_KEY is not set.")
 	}
-	u := usage.NewRedisRecorder(redisClient)
+	redisRecorder := usage.NewRedisRecorder(redisClient)
+	logRecorder := usage.NewLogRecorder()
+	u := usage.NewMultiRecorder(redisRecorder, logRecorder)
 
 	// Initialize Gateway Service
 	gatewayService := service.NewGatewayService(c, e, r, u)

@@ -67,7 +67,7 @@ func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) 
 		return model.ChatResponse{}, err
 	}
 	//cache response
-	g.cache.Store(ctx, cache.CacheEntry{
+	if err := g.cache.Store(ctx, cache.CacheEntry{
 		Embeddings: embedding.Values,
 		Prompt:     normalizedReq.Prompt,
 		Response:   resp.Content,
@@ -78,7 +78,9 @@ func (g *GatewayService) HandleChat(ctx context.Context, req model.ChatRequest) 
 		HitCount:  0,
 		LastUsed:  time.Now(),
 		CreatedAt: time.Now(),
-	})
+	}); err != nil {
+		log.Printf("Failed to store response in cache: %v", err)
+	}
 	//record usage
 	if err := g.usage.Record(ctx, normalizedReq, *resp); err != nil {
 		log.Printf("Failed to record usage: %v", err)

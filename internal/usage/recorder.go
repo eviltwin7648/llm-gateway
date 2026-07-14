@@ -23,3 +23,22 @@ func (u *LogRecorder) Record(ctx context.Context, req model.ChatRequest, resp mo
 	log.Printf("[USAGE] Provider: %s | Model: %s | Tokens: %d | UsageCost: %d", req.Provider, resp.Model, resp.Tokens, resp.Usage)
 	return nil
 }
+
+type MultiRecorder struct {
+	recorders []Recorder
+}
+
+func NewMultiRecorder(recorders ...Recorder) *MultiRecorder {
+	return &MultiRecorder{
+		recorders: recorders,
+	}
+}
+
+func (m *MultiRecorder) Record(ctx context.Context, req model.ChatRequest, resp model.ChatResponse) error {
+	for _, r := range m.recorders {
+		if err := r.Record(ctx, req, resp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
